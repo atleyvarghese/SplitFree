@@ -103,14 +103,14 @@ create policy "Users can insert own profile"
 -- Groups: members can view, creators can manage
 create policy "Group members can view groups"
   on public.groups for select to authenticated
-  using (id in (select group_id from public.group_members where user_id = auth.uid()));
+  using (created_by = auth.uid() or public.is_group_member(id));
 
 create policy "Authenticated users can create groups"
   on public.groups for insert to authenticated with check (created_by = auth.uid());
 
 create policy "Group admins can update groups"
   on public.groups for update to authenticated
-  using (id in (select group_id from public.group_members where user_id = auth.uid() and role = 'admin'));
+  using (public.is_group_admin(id));
 
 create policy "Group admins can delete groups"
   on public.groups for delete to authenticated
