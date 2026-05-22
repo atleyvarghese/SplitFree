@@ -116,20 +116,35 @@ create policy "Group admins can delete groups"
   on public.groups for delete to authenticated
   using (created_by = auth.uid());
 
+-- Helpers: check membership/admin without triggering RLS (avoids infinite recursion)
+create or replace function public.is_group_member(gid uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.group_members
+    where group_id = gid and user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_group_admin(gid uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.group_members
+    where group_id = gid and user_id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- Group Members
 create policy "Members can view group members"
   on public.group_members for select to authenticated
-  using (group_id in (select group_id from public.group_members where user_id = auth.uid()));
+  using (public.is_group_member(group_id));
 
 create policy "Group admins can manage members"
   on public.group_members for insert to authenticated
-  with check (group_id in (select group_id from public.group_members where user_id = auth.uid() and role = 'admin')
-    or user_id = auth.uid());
+  with check (public.is_group_admin(group_id) or user_id = auth.uid());
 
 create policy "Users can leave groups"
   on public.group_members for delete to authenticated
-  using (user_id = auth.uid() or
-    group_id in (select group_id from public.group_members where user_id = auth.uid() and role = 'admin'));
+  using (user_id = auth.uid() or public.is_group_admin(group_id));
 
 -- Expenses
 create policy "Group members can view expenses"
